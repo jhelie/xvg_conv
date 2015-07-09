@@ -13,16 +13,73 @@ import os.path
 # create parser
 #=========================================================================================
 version_nb = "0.0.1"
-parser = argparse.ArgumentParser(prog = 'xvg_reverse', usage='', add_help = False, formatter_class = argparse.RawDescriptionHelpFormatter, description =\
+parser = argparse.ArgumentParser(prog = 'xvg_conv', usage='', add_help = False, formatter_class = argparse.RawDescriptionHelpFormatter, description =\
 '''
 **********************************************
 v''' + version_nb + '''
 author: Jean Helie (jean.helie@bioch.ox.ac.uk)
-git: https://github.com/jhelie/xvg_reverse
+git: https://github.com/jhelie/xvg_conv
 **********************************************
 
 DESCRIPTION:
- Outputs a new xvg where rows have been reversed except for the first one.
+ 
+Little utility to convert energy units.
+
+It is important to understand the differences between kT and kcal.mol-1 or kJ.mol-1. These are not just 3
+different units to express energy but correspond to different scales.
+
+Joules and Calories
+-------------------
+
+Energy is fundamentally expressed in Joules (J) or kJ. By definition 1 Joule is the work done by a
+force of 1 N when the application point moves 1 meter in the direction of the force. It also corresponds
+to the energy provided by a power of 1 W during 1 s.
+
+Calories can also be used to express energy. 1 cal has been defined as the energy necessary to increase
+the temperature of 1 gram of water by 1 degree Celsius.
+
+Both Joule and calories are small units and usually expressed as kJ and kcal.
+
+1 kcal = 4.184 kJ 
+
+dimension of kT
+---------------
+
+By definition: k = R / Na where R is the gas constant and Na is the Avogadro constant and it can 
+therefore be thought of as a microscopic version of the gas constant.
+ -> PV = nRT where n is the number of moles
+ -> PV = NkT where N is the number of molecules
+
+R = 8.314 J.K-1.mol-1 and Na = 6.022 x 10^23 mol-1 and so:
+ -> k = 1.380 x 10-23 J.K-1
+ -> it follows that kT is in J and also an energy.
+ -> the value of "1 kT" intrinsically depends on the temperature...
+
+why is kT useful and relationship with kJ.mol-1 and kcal.mol-1?
+---------------------------------------------------------------
+
+In the Maxwell-Boltzmann distribution theory the probability of observing a MOLECULE in a state pi is
+proportional to the energy Gi of that state as per the relation:
+
+ -> pi ~ exp(- Gi / kT)
+
+So kT is a useful unit at the MICROSCOPIC level to express energy as a function of the THERMICALLY
+available energy. Plus the equiparition theorem tells us that the energy associated with each
+quadratic degree of freedom is kT / 2. However "kT"s cannot be converted into kJ.mol-1 or
+kcal.mol-1 as the dimensions are different and those units correspond to MACROSCOPIC measures of
+energy!
+
+However by multiplying a microscopic energy expressed in kT by the Avogadro constant Na we can
+extrapolate to which macroscopic energy (i.e. for a mole instead of a molecule) it corresponds.
+
+The rule of thumb "1 kT equals approximately 2.5 kJ.mol-1" is thus a conceptual shortcut linking two
+energy scales (not to mention it does not convey the temperature dependence).
+
+A few equivalences are worth remembering:
+
+ -> T = 298K (25C): kT x Na = 2.479 kJ.mol-1 = 0.593 kcal.mol-1
+ -> T = 310K (37C): kT x Na = 2.577 kJ.mol-1 = 0.616 kcal.mol-1
+ -> T = 323K (50C): kT x Na = 2.686 kJ.mol-1 = 0.642 kcal.mol-1
 
 REQUIREMENTS:
  - numpy
@@ -40,7 +97,10 @@ NOTES:
 Option	      Default  	Description                    
 -----------------------------------------------------
 -f			: xvg file
--o		[f]_rev: name of outptut file
+-o		[f]_conv: name of outptut file
+--temp		[323]	: temperature in Kelvin
+--iu			: units of input ('kT','kJ','kcal')
+--ou			: desired unit output ('kT','kJ','kcal')
 --comments	@,#	: lines starting with these characters will be considered as comment
 
 Other options
@@ -53,6 +113,10 @@ Other options
 #options
 parser.add_argument('-f', nargs=1, dest='xvgfilename', default=["none"], help=argparse.SUPPRESS, required=True)
 parser.add_argument('-o', nargs=1, dest='output_file', default=["auto"], help=argparse.SUPPRESS)
+parser.add_argument('--temp', nargs=1, dest='temp', default=[323], type = float, help=argparse.SUPPRESS)
+parser.add_argument('--iu', dest='input_unit', choices=['kT','kJ','kcal'], default='none', help=argparse.SUPPRESS)
+parser.add_argument('--ou', dest='output_unit', choices=['kT','kJ','kcal'], default='none', help=argparse.SUPPRESS)
+
 parser.add_argument('--comments', nargs=1, dest='comments', default=['@,#'], help=argparse.SUPPRESS)
 
 #other options
@@ -65,8 +129,11 @@ parser.add_argument('-h','--help', action='help', help=argparse.SUPPRESS)
 
 args = parser.parse_args()
 args.xvgfilename = args.xvgfilename[0]
+args.temp = args.temp[0]
 args.output_file = args.output_file[0]
 args.comments = args.comments[0].split(',')
+in_unit = args.input_unit
+out_unit = args.output_unit
 
 #=========================================================================================
 # import modules (doing it now otherwise might crash before we can display the help menu!)
@@ -94,11 +161,51 @@ if not os.path.isfile(args.xvgfilename):
 	sys.exit(1)
 
 if args.output_file == "auto":
-	args.output_file = str(args.xvgfilename[:-4]) + "_rev"
+	args.output_file = str(args.xvgfilename[:-4]) + "_conv2" + str(out_unit)
+
+if in_unit == "none" or out_unit == "none":
+	print "Error: you must specify both --iu and --ou, see --help."
+	sys.exit(1)
+
+if in_unit != "kT":
+	in_unit += ".mol-1"
+if out_unit != "kT":
+	out_unit += ".mol-1"
+if in_unit == out_unit:
+	print "Error: both input and output units are in " + str(in_unit)
+	sys.exit(1)
 	
 ##########################################################################################
 # FUNCTIONS DEFINITIONS
 ##########################################################################################
+
+conv_factor = 1
+R = 8.3144621
+RT = R * args.temp / float(1000)
+
+#case: from kT
+#-------------
+if in_unit == "kT":
+	if out_unit == "kJ.mol-1":
+		conv_factor = RT
+	else:
+		conv_factor = RT / float(4.184)
+
+#case: from kJ.mol-1
+#-------------------
+elif in_unit == "kJ.mol-1":
+	if out_unit == "kT":
+		conv_factor = 1 / float(RT)
+	else:
+		conv_factor = 1 / float(4.184)
+
+#case: from kcal.mol-1
+#---------------------
+elif in_unit == "kcal.mol-1":
+	if out_unit == "kT":
+		conv_factor = float(4.184) / float(RT)
+	else:
+		conv_factor = float(4.184)
 
 #=========================================================================================
 # data loading
@@ -158,7 +265,7 @@ def load_xvg():															#DONE
 	first_col = tmp_f_data[:,0]
 
 	#stock data
-	f_data = tmp_f_data[:,1:][::-1]
+	f_data = tmp_f_data[:,1:] * conv_factor
 			
 	return
 
@@ -173,7 +280,7 @@ def write_xvg():
 	output_xvg = open(filename_xvg, 'w')
 	
 	#general header
-	output_xvg.write("# [reversed xvg - written by xvg_reverse v" + str(version_nb) + "]\n")
+	output_xvg.write("# [converted units from " + str(in_unit) + " to " + str(out_unit) + " - written by xvg_conv v" + str(version_nb) + "]\n")
 	tmp_files = ""
 	for f in args.xvgfilename:
 		tmp_files += "," + str(f)
@@ -210,7 +317,7 @@ def write_xvg():
 print "\nReading files..."
 load_xvg()
 
-print "\nWriting reversed file..."
+print "\nWriting converted file..."
 write_xvg()
 
 #=========================================================================================
