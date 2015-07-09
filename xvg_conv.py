@@ -281,10 +281,7 @@ def write_xvg():
 	
 	#general header
 	output_xvg.write("# [converted units from " + str(in_unit) + " to " + str(out_unit) + " - written by xvg_conv v" + str(version_nb) + "]\n")
-	tmp_files = ""
-	for f in args.xvgfilename:
-		tmp_files += "," + str(f)
-	output_xvg.write("# - files: " + str(tmp_files[1:]) + "\n")
+	output_xvg.write("# - file: " + str(args.xvgfilename) + "\n")
 	
 	#xvg metadata
 	output_xvg.write("@ xaxis label " + str(label_xaxis) + "\n")
