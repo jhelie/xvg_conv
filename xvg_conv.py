@@ -98,6 +98,7 @@ Option	      Default  	Description
 -----------------------------------------------------
 -f			: xvg file
 -o		[f]_conv: name of outptut file
+--xaxis	1	: factor by which to scale the first column (x axis)
 --temp		[323]	: temperature in Kelvin
 --iu			: units of input ('kT','kJ','kcal')
 --ou			: desired unit output ('kT','kJ','kcal')
@@ -113,6 +114,7 @@ Other options
 #options
 parser.add_argument('-f', nargs=1, dest='xvgfilename', default=["none"], help=argparse.SUPPRESS, required=True)
 parser.add_argument('-o', nargs=1, dest='output_file', default=["auto"], help=argparse.SUPPRESS)
+parser.add_argument('--xaxis', nargs=1, dest='xaxis', default=[1], type = float, help=argparse.SUPPRESS)
 parser.add_argument('--temp', nargs=1, dest='temp', default=[323], type = float, help=argparse.SUPPRESS)
 parser.add_argument('--iu', dest='input_unit', choices=['kT','kJ','kcal'], default='none', help=argparse.SUPPRESS)
 parser.add_argument('--ou', dest='output_unit', choices=['kT','kJ','kcal'], default='none', help=argparse.SUPPRESS)
@@ -129,6 +131,7 @@ parser.add_argument('-h','--help', action='help', help=argparse.SUPPRESS)
 
 args = parser.parse_args()
 args.xvgfilename = args.xvgfilename[0]
+args.xaxis = args.xaxis[0]
 args.temp = args.temp[0]
 args.output_file = args.output_file[0]
 args.comments = args.comments[0].split(',')
@@ -167,14 +170,18 @@ if in_unit == "none" or out_unit == "none":
 	print "Error: you must specify both --iu and --ou, see --help."
 	sys.exit(1)
 
+global scale_x_only
+scale_x_only = False
 if in_unit != "kT":
 	in_unit += ".mol-1"
 if out_unit != "kT":
 	out_unit += ".mol-1"
-if in_unit == out_unit:
-	print "Error: both input and output units are in " + str(in_unit)
+if in_unit == out_unit and args.axis == 1:
+	print "Error: you need to specify different in and out units or a scale factor for the x axis. " + str(in_unit)
 	sys.exit(1)
-	
+elif in_unit == out_unit and args.axis != 1:
+	scale_x_only = True
+
 ##########################################################################################
 # FUNCTIONS DEFINITIONS
 ##########################################################################################
@@ -262,10 +269,13 @@ def load_xvg():															#DONE
 	nb_cols = np.shape(tmp_f_data)[1] -1 
 
 	#get first col
-	first_col = tmp_f_data[:,0]
+	first_col = tmp_f_data[:,0] * float(args.xaxis)
 
 	#stock data
-	f_data = tmp_f_data[:,1:] * conv_factor
+	if scale_x_only:
+		f_data = tmp_f_data[:,1:]
+	else:
+		f_data = tmp_f_data[:,1:] * conv_factor
 			
 	return
 
